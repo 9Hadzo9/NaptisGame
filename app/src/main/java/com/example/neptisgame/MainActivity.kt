@@ -1,6 +1,8 @@
 package com.example.neptisgame
 
 
+import DummyJsonApi
+import RetrofitClient
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -26,22 +28,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
     private lateinit var sharedPreferences: SharedPreferences
+    private lateinit var apiService: DummyJsonApi
 
     override fun onCreate(savedInstanceState: Bundle?) {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
 
-        // Initialize SharedPreferences
         sharedPreferences = getSharedPreferences("MyAppPrefs", MODE_PRIVATE)
 
-        // Check if the user is logged in
+        apiService = RetrofitClient.getApiService(sharedPreferences)
+
         val isLoggedIn = sharedPreferences.getBoolean("isLoggedIn", false)
 
         if (!isLoggedIn) {
-            // If not logged in, redirect to LoginActivity
+
             val intent = Intent(this, LoginActivity::class.java)
             startActivity(intent)
-            finish() // Close MainActivity so that the user cannot return to it without logging in
+            finish()
             return
         }
 
@@ -54,8 +57,8 @@ class MainActivity : AppCompatActivity() {
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
 
-        binding.fab.setOnClickListener { view ->
-            Toast.makeText(this, "Replace with your own action", Toast.LENGTH_LONG).show()
+        binding.fab.setOnClickListener {
+            Toast.makeText(this, "Connect", Toast.LENGTH_LONG).show()
         }
 
         val logoutButton = findViewById<Button>(R.id.logoutButton)
@@ -63,20 +66,34 @@ class MainActivity : AppCompatActivity() {
             logout()
         }
 
-        // Fetch user details
         fetchUserDetails()
+        fetchCurrentUser()
+    }
+
+    private fun fetchCurrentUser() {
+        apiService.getCurrentUser("Bearer " + sharedPreferences.getString("authToken", null))
+            .enqueue(object : Callback<User> {
+                override fun onResponse(call: Call<User>, response: Response<User>) {
+                    if (response.isSuccessful) {
+                        val currentUser = response.body()
+                        Toast.makeText(this@MainActivity, "Welcome, ${currentUser?.username}", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Failed to fetch user data", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onFailure(call: Call<User>, t: Throwable) {
+                    Toast.makeText(this@MainActivity, "Error: ${t.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        // Inflate the menu; this adds items to the action bar if it is present.
         menuInflater.inflate(R.menu.menu_main, menu)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         return when (item.itemId) {
             R.id.action_settings -> true
             else -> super.onOptionsItemSelected(item)
@@ -94,11 +111,11 @@ class MainActivity : AppCompatActivity() {
         val userId = sharedPreferences.getInt("userId", -1) // Assuming userId is stored after login
 
         if (userId != -1) {
-            RetrofitClient.apiService.getUser(userId).enqueue(object : Callback<User> {
+            val apiService = RetrofitClient.getApiService(sharedPreferences)
+            apiService.getUser(userId).enqueue(object : Callback<User> {
                 override fun onResponse(call: Call<User>, response: Response<User>) {
                     if (response.isSuccessful) {
                         val user = response.body()
-                        // Handle the user data, e.g., update UI with user information
                         Toast.makeText(this@MainActivity, "Welcome, ${user?.username}", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(this@MainActivity, "Failed to fetch user details", Toast.LENGTH_SHORT).show()
@@ -110,23 +127,21 @@ class MainActivity : AppCompatActivity() {
                 }
             })
         } else {
-            // Handle missing user ID, maybe log out the user
             val intent = Intent(this, LoginActivity::class.java)
             startActivity(intent)
             finish()
         }
     }
 
+
     private fun logout() {
-        // Clear the login state in SharedPreferences
         val editor = sharedPreferences.edit()
-        editor.clear()  // or editor.remove("isLoggedIn") if you only want to remove the login state
+        editor.clear()
         editor.apply()
 
-        // Redirect to LoginActivity
         val intent = Intent(this, LoginActivity::class.java)
         startActivity(intent)
-        finish()  // Close MainActivity
+        finish()
     }
 
 }
